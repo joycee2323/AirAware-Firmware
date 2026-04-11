@@ -56,6 +56,11 @@ CONFIG_BT_NIMBLE_MAX_CONNECTIONS=1
 # Store BLE config in RAM (faster, no NVS wear)
 CONFIG_BT_NIMBLE_NVS_PERSIST=n
 
+# ── lwIP ─────────────────────────────────────────────────────────────────────
+# Bigger socket pool so httpd can soak up Android captive-portal / Chrome
+# background traffic without starving the config UI.
+CONFIG_LWIP_MAX_SOCKETS=16
+
 # ── NVS ──────────────────────────────────────────────────────────────────────
 CONFIG_NVS_ENCRYPTION=n
 

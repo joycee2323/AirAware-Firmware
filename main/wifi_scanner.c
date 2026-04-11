@@ -1,6 +1,7 @@
 #include "wifi_scanner.h"
 #include "config.h"
 #include "config_server.h"
+#include "dns_server.h"
 #include "nvs_config.h"
 #include "odid_decoder.h"
 #include "led.h"
@@ -17,11 +18,20 @@
 
 static const char *TAG = "WIFI_SCAN";
 
+/* Fixed channel the softAP beacons on. Scanner must be pinned here
+ * whenever a client is connected to the config portal, otherwise the
+ * channel hopper drags the radio off-channel and the AP beacon drops. */
+#define WSD_AP_CHANNEL 6
+
 static QueueHandle_t  s_output_queue = NULL;
 static bool           s_running      = false;
 static bool           s_paused       = false;
 static TaskHandle_t   s_hop_task     = NULL;
 static SemaphoreHandle_t s_pause_mutex = NULL;
+
+/* Number of stations currently associated with the config-portal AP.
+ * Scanner auto-pauses while this is > 0. */
+static int s_ap_sta_count = 0;
 
 /* Soft-AP SSID built from MAC at startup */
 static char s_ap_ssid[32] = "AirAware-X1-0000";
@@ -215,6 +225,35 @@ static void build_ap_ssid(char *buf, size_t len)
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
+ * SoftAP station-connect/disconnect event handler
+ *
+ * While any client is associated with the config AP, the radio must stay
+ * pinned to WSD_AP_CHANNEL or the AP's beacons drop and the client loses
+ * the portal. Pause the scanner on first connect, resume on last disconnect.
+ * ───────────────────────────────────────────────────────────────────────────── */
+static void ap_event_handler(void *arg, esp_event_base_t base,
+                             int32_t event_id, void *event_data)
+{
+    if (base != WIFI_EVENT) return;
+
+    if (event_id == WIFI_EVENT_AP_STACONNECTED) {
+        s_ap_sta_count++;
+        ESP_LOGI(TAG, "AP client connected (total=%d) — pausing scanner",
+                 s_ap_sta_count);
+        if (s_ap_sta_count == 1) {
+            wifi_scanner_pause();
+        }
+    } else if (event_id == WIFI_EVENT_AP_STADISCONNECTED) {
+        if (s_ap_sta_count > 0) s_ap_sta_count--;
+        ESP_LOGI(TAG, "AP client disconnected (total=%d)", s_ap_sta_count);
+        if (s_ap_sta_count == 0) {
+            ESP_LOGI(TAG, "No AP clients — resuming scanner");
+            wifi_scanner_resume();
+        }
+    }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
  * Public API
  * ───────────────────────────────────────────────────────────────────────────── */
 esp_err_t wifi_scanner_start(QueueHandle_t output_queue)
@@ -240,6 +279,15 @@ esp_err_t wifi_scanner_start(QueueHandle_t output_queue)
 
     esp_wifi_set_storage(WIFI_STORAGE_RAM);
 
+    /* Register AP station connect/disconnect handler so the scanner
+     * auto-pauses whenever a client is on the config portal. */
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(
+        WIFI_EVENT, WIFI_EVENT_AP_STACONNECTED,
+        &ap_event_handler, NULL, NULL));
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(
+        WIFI_EVENT, WIFI_EVENT_AP_STADISCONNECTED,
+        &ap_event_handler, NULL, NULL));
+
     /* APSTA mode: AP for config portal + STA for uplink */
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
 
@@ -252,13 +300,19 @@ esp_err_t wifi_scanner_start(QueueHandle_t output_queue)
     ap_cfg.ap.authmode       = (CFG_AP_PASS[0] == '\0')
                                ? WIFI_AUTH_OPEN
                                : WIFI_AUTH_WPA2_PSK;
-    ap_cfg.ap.channel        = 6;    /* keep AP on ch6 — best for ODID overlap */
+    ap_cfg.ap.channel        = WSD_AP_CHANNEL;  /* keep AP on ch6 — best for ODID overlap */
 
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_cfg));
     ESP_ERROR_CHECK(esp_wifi_start());
 
     /* Start the HTTP config server (non-blocking) */
     config_server_start_http();
+
+    /* Start captive-portal DNS hijack so phones auto-open the config UI.
+     * Must come after softAP is up and lwIP has the netif bound. */
+    if (dns_server_start(CFG_AP_IP) != ESP_OK) {
+        ESP_LOGW(TAG, "Captive DNS server failed to start");
+    }
 
     /* Enable promiscuous mode */
     wifi_promiscuous_filter_t filter = {
@@ -291,7 +345,11 @@ void wifi_scanner_pause(void)
     /* Wait for channel hop task to notice the pause */
     vTaskDelay(pdMS_TO_TICKS(WSD_WIFI_DWELL_MS + 50));
     esp_wifi_set_promiscuous(false);
-    ESP_LOGD(TAG, "Scanner paused");
+    /* Pin radio to the softAP's channel so beacons keep going out while
+     * the hop loop is idle. Without this the radio stays on whichever
+     * channel the hopper was on last, and the AP beacon stops. */
+    esp_wifi_set_channel(WSD_AP_CHANNEL, WIFI_SECOND_CHAN_NONE);
+    ESP_LOGD(TAG, "Scanner paused (pinned to ch %d)", WSD_AP_CHANNEL);
 }
 
 void wifi_scanner_resume(void)

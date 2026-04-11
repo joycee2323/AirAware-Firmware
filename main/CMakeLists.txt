@@ -9,6 +9,7 @@ idf_component_register(
         "output.c"
         "led.c"
         "config_server.c"
+        "dns_server.c"
         "ota_handler.c"
     INCLUDE_DIRS "."
     REQUIRES
@@ -23,4 +24,5 @@ idf_component_register(
         bt
         driver
         mbedtls
+        lwip
 )
