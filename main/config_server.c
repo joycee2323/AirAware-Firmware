@@ -92,6 +92,7 @@ static const char HEAD[] =
 ".f{margin-bottom:12px}"
 ".f label{display:block;font-size:.85rem;margin-bottom:2px}"
 ".f input,.f select{width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:.85rem}"
+".f input[readonly]{background:#eee;color:#666}"
 ".c{display:flex;gap:8px;align-items:center}"
 ".c input{width:16px;height:16px}"
 ".r input{width:100%;margin-bottom:4px;padding:5px 8px;border:1px solid #ccc;border-radius:4px;font-size:.8rem}"
@@ -181,6 +182,30 @@ static esp_err_t handler_root_get(httpd_req_t *req)
         SEL(c->mode == WSD_MODE_RELAY), SEL(c->mode == WSD_MODE_UART),
         CHK(c->relay_ping_en), c->relay_ping_label,
         CHK(c->self_id_override), CHK(c->ble_legacy_en), CHK(c->flash_led_en));
+    httpd_resp_send_chunk(req, buf, HTTPD_RESP_USE_STRLEN);
+
+    /* Location */
+    snprintf(buf, sizeof(buf),
+        "<div class=s><h3>Location</h3>"
+        "<div class=f><label>Latitude</label>"
+        "<input name=node_lat value=\"%.6f\" maxlength=15></div>"
+        "<div class=f><label>Longitude</label>"
+        "<input name=node_lon value=\"%.6f\" maxlength=15></div>"
+        "</div>",
+        c->node_lat, c->node_lon);
+    httpd_resp_send_chunk(req, buf, HTTPD_RESP_USE_STRLEN);
+
+    /* API Key — read-only display of current, plus writable input to replace.
+     * Submitting the form with the "New" field empty leaves the key unchanged. */
+    snprintf(buf, sizeof(buf),
+        "<div class=s><h3>API Key</h3>"
+        "<div class=f><label>Current</label>"
+        "<input name=aw_key value=\"%s\" readonly></div>"
+        "<div class=f><label>New (paste to replace)</label>"
+        "<input name=aw_key_new value=\"\" maxlength=%d "
+        "placeholder=\"leave blank to keep current\"></div>"
+        "</div>",
+        c->api_key, WSD_API_KEY_MAX - 1);
     httpd_resp_send_chunk(req, buf, HTTPD_RESP_USE_STRLEN);
 
     /* Blacklist */
@@ -334,6 +359,21 @@ static esp_err_t handler_save_post(httpd_req_t *req)
     c->flash_led_en     = form_has_field(body, "led_en");
     if (form_get_field(body, "ping_label", val, sizeof(val)) && val[0])
         strlcpy(c->relay_ping_label, val, sizeof(c->relay_ping_label));
+
+    if (form_get_field(body, "node_lat", val, sizeof(val)))
+        c->node_lat = atof(val);
+    if (form_get_field(body, "node_lon", val, sizeof(val)))
+        c->node_lon = atof(val);
+
+    /* API key: prefer the writable "new" field when non-empty, otherwise
+     * fall back to the read-only aw_key field which round-trips the current
+     * value. Either way, only overwrite when we have something to store so
+     * an empty form submission cannot wipe the key. */
+    if (form_get_field(body, "aw_key_new", val, sizeof(val)) && val[0]) {
+        strlcpy(c->api_key, val, sizeof(c->api_key));
+    } else if (form_get_field(body, "aw_key", val, sizeof(val)) && val[0]) {
+        strlcpy(c->api_key, val, sizeof(c->api_key));
+    }
 
     if (form_get_field(body, "wifi_strat", val, sizeof(val)))
         c->wifi_strategy = (wsd_wifi_strategy_t)atoi(val);

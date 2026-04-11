@@ -1,6 +1,8 @@
 #include "ble_relay.h"
 #include "config.h"
+#include "nvs_config.h"
 #include "esp_log.h"
+#include "esp_mac.h"
 #include "esp_random.h"
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
@@ -19,11 +21,14 @@ static bool          s_inited       = false;
 static bool          s_task_created = false;
 static uint8_t       s_counter      = 0;
 
-/* Handle 0: ODID relay broadcast (legacy PDU, non-connectable)
+/* Handle 0: ODID relay broadcast (extended adv, legacy PDU, non-connectable)
  * Handle 2: AirAware detection advertiser (extended PDU, non-connectable,
- *           manufacturer-specific data, company ID 0x08FF) */
+ *           manufacturer-specific data, company ID 0x08FF)
+ * Handle 3: Node identity advertiser (extended PDU, non-connectable,
+ *           manufacturer-specific data, company ID 0x08FE — MAC + key prefix) */
 #define ADV_HANDLE      0
 #define DET_ADV_HANDLE  2
+#define ID_ADV_HANDLE   3
 
 /* Max JSON payload that fits in a single extended-adv AD structure.
  * AD header: 1 len + 1 type(0xFF) + 2 company id = 4 bytes.
@@ -31,7 +36,21 @@ static uint8_t       s_counter      = 0;
  * enough that the Android app can parse it from a single adv report. */
 #define DET_JSON_MAX    200
 
+/* Identity advertiser payload — manufacturer-specific AD inside an extended
+ * advertisement on handle 3:
+ *   [0]     length = 1 (type) + 2 (company) + 6 (mac) + key_len
+ *   [1]     0xFF
+ *   [2]     company LSB (0xFE of 0x08FE)
+ *   [3]     company MSB (0x08 of 0x08FE)
+ *   [4..9]  node MAC (6 bytes)
+ *   [10..]  api_key bytes (up to ID_API_KEY_MAX, unterminated)
+ *
+ * Extended PDUs support up to ~1650 bytes, so the full 36-char UUID api_key
+ * fits comfortably. 64 gives headroom for any future key format. */
+#define ID_API_KEY_MAX  64
+
 static bool s_det_adv_configured = false;
+static bool s_id_adv_configured  = false;
 
 /* Forward decls */
 static void relay_task(void *arg);
@@ -486,6 +505,91 @@ static int configure_detection_advertiser(void)
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
+ * Identity advertiser (handle 3) — extended advertising
+ *
+ * Mirrors the detection advertiser setup (non-connectable, non-scannable
+ * extended PDU) but at 500ms interval and with a static manufacturer-specific
+ * payload: company 0x08FE + node MAC(6) + api_key prefix (up to 8 bytes).
+ * ───────────────────────────────────────────────────────────────────────────── */
+static int configure_id_advertiser(void)
+{
+    struct ble_gap_ext_adv_params params;
+    memset(&params, 0, sizeof(params));
+    params.legacy_pdu    = 0;
+    params.connectable   = 0;
+    params.scannable     = 0;
+    params.own_addr_type = BLE_OWN_ADDR_PUBLIC;
+    params.primary_phy   = BLE_HCI_LE_PHY_1M;
+    params.secondary_phy = BLE_HCI_LE_PHY_1M;
+    params.itvl_min      = BLE_GAP_ADV_ITVL_MS(500);
+    params.itvl_max      = BLE_GAP_ADV_ITVL_MS(500);
+    params.sid           = 3;
+    params.tx_power      = 127;
+
+    int rc = ble_gap_ext_adv_configure(ID_ADV_HANDLE, &params,
+                                       NULL, NULL, NULL);
+    if (rc != 0) {
+        ESP_LOGE(TAG, "id ext_adv_configure (handle %d) failed: %d",
+                 ID_ADV_HANDLE, rc);
+        return rc;
+    }
+
+    uint8_t mac[6];
+    esp_read_mac(mac, ESP_MAC_WIFI_STA);
+
+    size_t key_len = strlen(g_config.api_key);
+    if (key_len > ID_API_KEY_MAX) key_len = ID_API_KEY_MAX;
+
+    /* Manufacturer-specific AD structure:
+     *   [0] length = 1 (type) + 2 (company) + 6 (mac) + key_len
+     *   [1] 0xFF
+     *   [2] company LSB (0xFE of 0x08FE)
+     *   [3] company MSB (0x08 of 0x08FE)
+     *   [4..9]  MAC
+     *   [10..]  api_key prefix */
+    uint8_t buf[1 + 1 + 2 + 6 + ID_API_KEY_MAX];
+    size_t payload_len = 1 + 2 + 6 + key_len;  /* type + company + mac + key */
+    buf[0] = (uint8_t)payload_len;
+    buf[1] = 0xFF;
+    buf[2] = 0xFE;
+    buf[3] = 0x08;
+    memcpy(&buf[4],  mac, 6);
+    memcpy(&buf[10], g_config.api_key, key_len);
+    size_t total = 1 + payload_len;
+
+    struct os_mbuf *data = os_msys_get_pkthdr(total, 0);
+    if (!data) {
+        ESP_LOGW(TAG, "id msys_get_pkthdr failed");
+        return -1;
+    }
+    if (os_mbuf_append(data, buf, total) != 0) {
+        ESP_LOGW(TAG, "id mbuf_append failed");
+        os_mbuf_free_chain(data);
+        return -1;
+    }
+
+    rc = ble_gap_ext_adv_set_data(ID_ADV_HANDLE, data);
+    if (rc != 0) {
+        ESP_LOGE(TAG, "id ext_adv_set_data failed: %d", rc);
+        return rc;
+    }
+
+    rc = ble_gap_ext_adv_start(ID_ADV_HANDLE, 0, 0);
+    if (rc != 0 && rc != BLE_HS_EALREADY) {
+        ESP_LOGE(TAG, "id ext_adv_start failed: %d", rc);
+        return rc;
+    }
+
+    s_id_adv_configured = true;
+    ESP_LOGI(TAG,
+             "Identity advertiser started on handle %d mac=%02X:%02X:%02X:%02X:%02X:%02X key_len=%u",
+             ID_ADV_HANDLE,
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
+             (unsigned)key_len);
+    return 0;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
  * NimBLE host callbacks
  * ───────────────────────────────────────────────────────────────────────────── */
 static void on_sync(void)
@@ -512,6 +616,9 @@ static void on_sync(void)
         ESP_LOGI(TAG, "Relay advertiser configured OK");
     }
 
+    /* Legacy GAP advertiser — identity beacon (static MAC + API key). */
+    configure_id_advertiser();
+
     /* Handle 2 — extended PDU for AirAware detection advertising. */
     configure_detection_advertiser();
 
@@ -524,6 +631,7 @@ static void on_reset(int reason)
 {
     ESP_LOGW(TAG, "BLE host reset: %d", reason);
     s_det_adv_configured = false;
+    s_id_adv_configured  = false;
 }
 
 static void nimble_host_task(void *arg)
