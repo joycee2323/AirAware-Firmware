@@ -2,17 +2,25 @@
 
 /**
  * Westshore Drone Remote ID Receiver - Hardware Configuration
- * PCB: Westshore Drone v1.0 (ESP32-C6-WROOM-1U)
+ * PCB: Westshore Drone (ESP32-C5-WROOM-1-N8R8)
  *
- * GPIO mapping derived from KiCad schematic (Erik_J_BlueMark_DronescoutBridge_v1.0):
+ * ESP32-C5 notes:
+ *   - GPIO range: GPIO0–GPIO28 (fewer pads than C6).
+ *   - Strapping pins on C5: GPIO2, GPIO7, GPIO8, GPIO27, GPIO28
+ *     (do not drive externally at boot without understanding defaults).
+ *   - USB D-/D+ are GPIO13/GPIO14 on C5 (C6 used GPIO12/GPIO13).
+ *   - Dual-band WiFi 6 (2.4 + 5 GHz); firmware locks to 2.4 GHz via
+ *     CONFIG_WIFI_BAND_MODE_2G_ONLY.
+ *
+ * GPIO mapping (to be confirmed against final C5 PCB schematic):
  *
  *   GPIO4  - Status LED D6 (Orange, active HIGH, R8 470R series)
  *   GPIO5  - UART1 TX → J2/J3 secondary JST connector (TxD.OUT)
  *   GPIO6  - UART1 RX ← J2/J3 secondary JST connector (RxD.OUT)
  *   GPIO8  - Strapping / pull-up net (R1/R5 10k, do not drive)
  *   GPIO9  - Boot button SW2 (active LOW, internal pull-up)
- *   GPIO12 - USB D- (IO12/D-, connected directly to USB-C, do not use as GPIO)
- *   GPIO13 - USB D+ (IO13/D+, connected directly to USB-C, do not use as GPIO)
+ *   GPIO13 - USB D- (connected directly to USB-C, do not use as GPIO)
+ *   GPIO14 - USB D+ (connected directly to USB-C, do not use as GPIO)
  *   GPIO16 - UART0 TX → J2/J3 primary JST connector (TxD.IN)
  *   GPIO17 - UART0 RX ← J2/J3 primary JST connector (RxD.IN)
  *   EN     - Reset button SW1 (hardware reset)

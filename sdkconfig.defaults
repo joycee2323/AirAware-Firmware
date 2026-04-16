@@ -1,15 +1,15 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Westshore Drone Remote ID Receiver — sdkconfig.defaults
-# Target: ESP32-C6-WROOM-1U  (esp32c6)
-# IDF version: v5.3 or later
+# Target: ESP32-C5-WROOM-1  (esp32c5)
+# IDF version: v5.5 or later (C5 production support requires v5.5+)
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── Target ───────────────────────────────────────────────────────────────────
-CONFIG_IDF_TARGET="esp32c6"
+CONFIG_IDF_TARGET="esp32c5"
 
 # ── Flash / partition ────────────────────────────────────────────────────────
-CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
-CONFIG_ESPTOOLPY_FLASHSIZE="4MB"
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="8MB"
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 
@@ -33,10 +33,12 @@ CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=8
 CONFIG_ESP_WIFI_STATIC_TX_BUFFER=y
 CONFIG_ESP_WIFI_TX_BUFFER_TYPE=0
 CONFIG_ESP_WIFI_STATIC_TX_BUFFER_NUM=4
-CONFIG_ESP_WIFI_PROMISCUOUS_BUF_SIZE=1600
 # Disable power save for continuous scanning
 CONFIG_ESP_WIFI_STA_DISCONNECTED_PM_ENABLE=n
 CONFIG_ESP_PHY_ENABLE_USB=y
+# 2.4 GHz band lock is applied at runtime in wifi_scanner.c via
+# esp_wifi_set_band_mode(WIFI_BAND_MODE_2G_ONLY) — no build-time option
+# exists in IDF 5.5.
 
 # ── Bluetooth / NimBLE ───────────────────────────────────────────────────────
 CONFIG_BT_ENABLED=y
@@ -46,9 +48,11 @@ CONFIG_BT_NIMBLE_ROLE_CENTRAL=n
 CONFIG_BT_NIMBLE_ROLE_PERIPHERAL=n
 CONFIG_BT_NIMBLE_ROLE_BROADCASTER=n
 CONFIG_BT_NIMBLE_ROLE_OBSERVER=y
-# Enable BT5 extended advertising scanner
+# Enable BT5 extended advertising scanner.
+# Coded PHY is pulled in via CONFIG_BT_NIMBLE_LL_CFG_FEAT_LE_CODED_PHY (set
+# implicitly under BT_LE_50_FEATURE_SUPPORT); the old BT_NIMBLE_CODED_PHY
+# symbol was removed in IDF 5.5.
 CONFIG_BT_NIMBLE_EXT_ADV=y
-CONFIG_BT_NIMBLE_CODED_PHY=y
 # Four extended-advertising instances: handle 0 for the ODID relay broadcast,
 # handle 1 for the node identity advertiser (MAC + API key, company 0x08FE),
 # and handle 2 for the AirAware detection advertiser (manufacturer-specific

@@ -1,5 +1,6 @@
 #include "output.h"
 #include "config.h"
+#include "nvs_config.h"
 #include "ble_relay.h"
 #include "esp_log.h"
 #include "driver/uart.h"

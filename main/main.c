@@ -56,7 +56,7 @@ void app_main(void)
      * ────────────────────────────────────────────────────────────────────── */
     ESP_LOGI(TAG, "===========================================");
     ESP_LOGI(TAG, " AirAware X1 — Remote ID Sensor Node v1.1");
-    ESP_LOGI(TAG, " ESP32-C6  |  IDF %s", esp_get_idf_version());
+    ESP_LOGI(TAG, " ESP32-C5  |  IDF %s", esp_get_idf_version());
     ESP_LOGI(TAG, "===========================================");
     ESP_LOGI(TAG, " Mode:     %s",
              g_config.mode == WSD_MODE_RELAY ? "BLE relay" : "UART only");

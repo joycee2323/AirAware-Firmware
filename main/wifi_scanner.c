@@ -33,6 +33,7 @@ static SemaphoreHandle_t s_pause_mutex = NULL;
  * Scanner auto-pauses while this is > 0. */
 static int s_ap_sta_count = 0;
 
+
 /* Soft-AP SSID built from MAC at startup */
 static char s_ap_ssid[32] = "AirAware-X1-0000";
 
@@ -276,6 +277,10 @@ esp_err_t wifi_scanner_start(QueueHandle_t output_queue)
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+    /* ESP32-C5 is dual-band; lock to 2.4 GHz since ODID beacons only
+     * transmit on 2.4 GHz and 5 GHz scan would waste dwell time. */
+    esp_wifi_set_band_mode(WIFI_BAND_MODE_2G_ONLY);
 
     esp_wifi_set_storage(WIFI_STORAGE_RAM);
 

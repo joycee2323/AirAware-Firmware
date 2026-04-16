@@ -1,0 +1,8 @@
+build/
+mnt/
+_build.log
+idf_activate.bat
+.cache/
+.claude/
+sdkconfig
+dependencies.lock
