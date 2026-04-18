@@ -1,0 +1,12 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Westshore Drone Remote ID Receiver — sdkconfig.defaults.esp32c6
+# Target-specific overrides for ESP32-C6-WROOM-1U-N4.
+# Shared settings live in sdkconfig.defaults.
+# ─────────────────────────────────────────────────────────────────────────────
+
+CONFIG_IDF_TARGET="esp32c6"
+
+# 4 MB flash on N4 module
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="4MB"
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.esp32c6.csv"

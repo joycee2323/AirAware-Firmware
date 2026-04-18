@@ -1,17 +1,10 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# Westshore Drone Remote ID Receiver — sdkconfig.defaults
-# Target: ESP32-C5-WROOM-1  (esp32c5)
-# IDF version: v5.5 or later (C5 production support requires v5.5+)
+# Westshore Drone Remote ID Receiver — sdkconfig.defaults (shared)
+# Target/flash/partition-table values live in sdkconfig.defaults.<target>.
+# IDF version: v5.5 or later.
 # ─────────────────────────────────────────────────────────────────────────────
 
-# ── Target ───────────────────────────────────────────────────────────────────
-CONFIG_IDF_TARGET="esp32c5"
-
-# ── Flash / partition ────────────────────────────────────────────────────────
-CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
-CONFIG_ESPTOOLPY_FLASHSIZE="8MB"
 CONFIG_PARTITION_TABLE_CUSTOM=y
-CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 
 # ── FreeRTOS ─────────────────────────────────────────────────────────────────
 CONFIG_FREERTOS_HZ=1000
@@ -22,7 +15,7 @@ CONFIG_LOG_DEFAULT_LEVEL_INFO=y
 CONFIG_LOG_DEFAULT_LEVEL=3
 
 # ── USB / UART console ───────────────────────────────────────────────────────
-# Route IDF log output to USB-JTAG CDC — frees UART0 (GPIO16/17) for JSON
+# Route IDF log output to USB-JTAG CDC — frees UART0 for JSON
 CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
 CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
 
@@ -36,9 +29,6 @@ CONFIG_ESP_WIFI_STATIC_TX_BUFFER_NUM=4
 # Disable power save for continuous scanning
 CONFIG_ESP_WIFI_STA_DISCONNECTED_PM_ENABLE=n
 CONFIG_ESP_PHY_ENABLE_USB=y
-# 2.4 GHz band lock is applied at runtime in wifi_scanner.c via
-# esp_wifi_set_band_mode(WIFI_BAND_MODE_2G_ONLY) — no build-time option
-# exists in IDF 5.5.
 
 # ── Bluetooth / NimBLE ───────────────────────────────────────────────────────
 CONFIG_BT_ENABLED=y
@@ -54,9 +44,9 @@ CONFIG_BT_NIMBLE_ROLE_OBSERVER=y
 # symbol was removed in IDF 5.5.
 CONFIG_BT_NIMBLE_EXT_ADV=y
 # Four extended-advertising instances: handle 0 for the ODID relay broadcast,
-# handle 1 for the node identity advertiser (MAC + API key, company 0x08FE),
-# and handle 2 for the AirAware detection advertiser (manufacturer-specific
-# data, company 0x08FF).
+# handle 2 for the AirAware detection advertiser (manufacturer-specific
+# data, company 0x08FF), and handle 3 for the node identity advertiser
+# (MAC + API key, company 0x08FE).
 CONFIG_BT_NIMBLE_MAX_EXT_ADV_INSTANCES=4
 # BLE host task stack
 CONFIG_BT_NIMBLE_HOST_TASK_STACK_SIZE=5120
