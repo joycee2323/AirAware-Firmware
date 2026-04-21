@@ -36,7 +36,6 @@ typedef struct {
     bool                relay_ping_en;               /* broadcast bridge beacon  */
     char                relay_ping_label[WSD_LABEL_MAX_LEN]; /* "DroneScout Bridge" */
     bool                self_id_override;            /* inject Self-ID into relay */
-    bool                ble_legacy_en;               /* scan BLE legacy adverts   */
     bool                flash_led_en;                /* LED flashes on detection  */
 
     /* Reception */

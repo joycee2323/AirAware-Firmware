@@ -175,14 +175,11 @@ static esp_err_t handler_root_get(httpd_req_t *req)
         "<input type=checkbox name=self_id_ovr value=1 %s><label>Self ID override</label>"
         "</div></div>"
         "<div class=f><div class=c>"
-        "<input type=checkbox name=ble_en value=1 %s><label>BLE legacy</label>"
-        "</div></div>"
-        "<div class=f><div class=c>"
         "<input type=checkbox name=led_en value=1 %s><label>Flash LED</label>"
         "</div></div></div>",
         SEL(c->mode == WSD_MODE_RELAY), SEL(c->mode == WSD_MODE_UART),
         CHK(c->relay_ping_en), c->relay_ping_label,
-        CHK(c->self_id_override), CHK(c->ble_legacy_en), CHK(c->flash_led_en));
+        CHK(c->self_id_override), CHK(c->flash_led_en));
     httpd_resp_send_chunk(req, buf, HTTPD_RESP_USE_STRLEN);
 
     /* Location */
@@ -359,7 +356,6 @@ static esp_err_t handler_save_post(httpd_req_t *req)
         c->mode = (wsd_mode_t)atoi(val);
     c->relay_ping_en    = form_has_field(body, "ping_en");
     c->self_id_override = form_has_field(body, "self_id_ovr");
-    c->ble_legacy_en    = form_has_field(body, "ble_en");
     c->flash_led_en     = form_has_field(body, "led_en");
     if (form_get_field(body, "ping_label", val, sizeof(val)) && val[0])
         strlcpy(c->relay_ping_label, val, sizeof(c->relay_ping_label));
