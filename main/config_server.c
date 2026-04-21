@@ -4,6 +4,7 @@
 #include "led.h"
 #include "esp_http_server.h"
 #include "esp_system.h"
+#include "esp_app_desc.h"
 #include "esp_log.h"
 #include "esp_mac.h"
 #include <string.h>
@@ -279,15 +280,18 @@ static esp_err_t handler_root_get(httpd_req_t *req)
     httpd_resp_send_chunk(req, buf, HTTPD_RESP_USE_STRLEN);
 
     /* System tab */
+    const esp_app_desc_t *app_desc = esp_app_get_description();
     snprintf(buf, sizeof(buf),
         "<div id=s class=t>"
         "<div class=s><h3>Device Info</h3>"
         "<table class=i>"
-        "<tr><td>Firmware</td><td>v1.1</td></tr>"
+        "<tr><td>Firmware</td><td>%s</td></tr>"
+        "<tr><td>Built</td><td>%s %s</td></tr>"
         "<tr><td>MAC</td><td>%s</td></tr>"
         "<tr><td>IDF</td><td>%s</td></tr>"
         "<tr><td>Free heap</td><td>%lu</td></tr>"
         "</table></div></div>",
+        app_desc->version, app_desc->date, app_desc->time,
         mac_str, esp_get_idf_version(),
         (unsigned long)esp_get_free_heap_size());
     httpd_resp_send_chunk(req, buf, HTTPD_RESP_USE_STRLEN);

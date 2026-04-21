@@ -4,6 +4,9 @@
 #include "freertos/queue.h"
 #include "esp_log.h"
 #include "esp_system.h"
+#include "esp_app_desc.h"
+#include "esp_ota_ops.h"
+#include "esp_timer.h"
 #include "nvs_flash.h"
 
 #include "config.h"
@@ -15,6 +18,24 @@
 #include "ble_relay.h"
 
 static const char *TAG = "MAIN";
+
+/* Seconds of healthy runtime before we tell the bootloader this image is good.
+ * If we crash before this fires, otadata stays in pending-verify and the
+ * bootloader rolls back to the previous slot on next boot. */
+#define WSD_OTA_VALIDATE_DELAY_S 60
+
+static void ota_mark_valid_cb(void *arg)
+{
+    (void)arg;
+    esp_err_t err = esp_ota_mark_app_valid_cancel_rollback();
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "OTA: image marked valid — rollback cancelled");
+    } else {
+        ESP_LOGW(TAG, "OTA: mark-valid returned 0x%x (%s) — "
+                 "likely not a pending-verify image, safe to ignore",
+                 err, esp_err_to_name(err));
+    }
+}
 
 static QueueHandle_t raw_queue    = NULL;
 static QueueHandle_t output_queue = NULL;
@@ -61,8 +82,10 @@ void app_main(void)
      * Connect to WestshoreWatch-XXXX (password: westshore1) → http://192.168.4.1
      *
      * ────────────────────────────────────────────────────────────────────── */
+    const esp_app_desc_t *app_desc = esp_app_get_description();
     ESP_LOGI(TAG, "===========================================");
-    ESP_LOGI(TAG, " Westshore Watch X1 — Remote ID Sensor Node v1.1");
+    ESP_LOGI(TAG, " Westshore Watch X1 — Remote ID Sensor Node %s",
+             app_desc->version);
     ESP_LOGI(TAG, " ESP32-C5  |  IDF %s", esp_get_idf_version());
     ESP_LOGI(TAG, "===========================================");
     ESP_LOGI(TAG, " Mode:     %s",
@@ -131,6 +154,24 @@ void app_main(void)
              g_config.mode == WSD_MODE_RELAY ? "active" : "disabled");
     ESP_LOGI(TAG, "  Detection adv:  handle 2, company 0x08FF");
     ESP_LOGI(TAG, "  Config portal:  WestshoreWatch-XXXX → http://192.168.4.1");
+
+    /* One-shot timer: if we survive WSD_OTA_VALIDATE_DELAY_S with all core
+     * services up, commit the current image and cancel pending rollback.
+     * If we crash before the timer fires, the bootloader will revert on the
+     * next boot. */
+    esp_timer_handle_t ota_validate_timer = NULL;
+    const esp_timer_create_args_t targs = {
+        .callback = &ota_mark_valid_cb,
+        .name     = "ota_validate",
+    };
+    if (esp_timer_create(&targs, &ota_validate_timer) == ESP_OK) {
+        esp_timer_start_once(ota_validate_timer,
+                             (uint64_t)WSD_OTA_VALIDATE_DELAY_S * 1000000ULL);
+        ESP_LOGI(TAG, "OTA: will mark image valid in %ds",
+                 WSD_OTA_VALIDATE_DELAY_S);
+    } else {
+        ESP_LOGW(TAG, "OTA: failed to arm validate timer");
+    }
 
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(5000));
