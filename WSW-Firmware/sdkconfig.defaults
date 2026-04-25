@@ -54,6 +54,11 @@ CONFIG_BT_NIMBLE_EXT_ADV=y
 # data, company 0x08FF), and handle 3 for the node identity advertiser
 # (MAC + API key, company 0x08FE).
 CONFIG_BT_NIMBLE_MAX_EXT_ADV_INSTANCES=4
+# Per-instance extended-advertising payload cap. Pack advertiser on handle 1
+# emits an 83-byte AD; the NimBLE default is below that on some targets, which
+# causes ext_adv_set_data to return BLE_HS_EINVAL and the on-air pack to never
+# leave the controller. 251 is the BT5 spec max for a single AdvData fragment.
+CONFIG_BT_NIMBLE_EXT_ADV_MAX_SIZE=251
 # BLE host task stack
 CONFIG_BT_NIMBLE_HOST_TASK_STACK_SIZE=5120
 # Max number of concurrent connections (1 for the GATT client)

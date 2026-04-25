@@ -283,13 +283,13 @@ static void advertise_pack(const uint8_t *pack_payload)
 
     int rc = ble_gap_ext_adv_set_data(PACK_ADV_HANDLE, data);
     if (rc != 0) {
-        ESP_LOGW(TAG, "pack ext_adv_set_data failed: %d", rc);
+        ESP_LOGE(TAG, "pack ext_adv_set_data failed: %d", rc);
         return;
     }
 
     rc = ble_gap_ext_adv_start(PACK_ADV_HANDLE, 0, 0);
     if (rc != 0 && rc != BLE_HS_EALREADY) {
-        ESP_LOGW(TAG, "pack ext_adv_start failed: %d", rc);
+        ESP_LOGE(TAG, "pack ext_adv_start failed: %d", rc);
     }
 }
 
