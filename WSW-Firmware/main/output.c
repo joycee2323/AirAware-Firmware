@@ -230,8 +230,17 @@ static void output_task(void *arg)
         uart_write_bytes(WSD_UART_PRIMARY_NUM, banner, bn);
     }
 
+    /* Stop handle-2 detection ext-adv after this long without a fresh frame.
+     * Without this, the most recently advertised JSON would broadcast forever
+     * (NimBLE retains payload across stop/start; nothing else stops handle 2),
+     * and a phone entering BLE range hours after the source drone went silent
+     * would treat the stale payload as a current detection. Matches the
+     * silent_timeout_s default used by the relay slot table. */
+    static const TickType_t kAdvertiseIdleTimeout = pdMS_TO_TICKS(15000);
+    TickType_t last_advertise_tick = 0;
+
     while (true) {
-        if (xQueueReceive(s_queue, &det, portMAX_DELAY) == pdTRUE) {
+        if (xQueueReceive(s_queue, &det, pdMS_TO_TICKS(1000)) == pdTRUE) {
             int len = format_json(&det, json_buf, sizeof(json_buf));
             if (len > 0 && len < (int)sizeof(json_buf)) {
                 uart_write_bytes(WSD_UART_PRIMARY_NUM, json_buf, len);
@@ -243,6 +252,11 @@ static void output_task(void *arg)
             if (glen > 0 && glen < (int)sizeof(gatt_buf)) {
                 ble_detection_advertise(gatt_buf, (size_t)glen);
             }
+            last_advertise_tick = xTaskGetTickCount();
+        } else if (last_advertise_tick != 0 &&
+                   (xTaskGetTickCount() - last_advertise_tick) > kAdvertiseIdleTimeout) {
+            ble_detection_advertise_stop();
+            last_advertise_tick = 0;
         }
     }
 }
